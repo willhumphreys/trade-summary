@@ -1,0 +1,83 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff (if applicable)
+*.log
+local_settings.py
+db.sqlite3
+
+# Flask stuff (if applicable)
+instance/
+.webassets-cache
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv/
+
+# Environment variables
+.env
+.env.*
+
+# Editor and IDE files
+*~
+*.swp
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# macOS files
+.DS_Store
+
+# Docker files (if you generate files dynamically)
+docker-compose.override.yml
+
+.csv
+.lzo
+
+output
