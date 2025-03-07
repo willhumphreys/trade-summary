@@ -5,6 +5,7 @@ import shutil
 import boto3
 
 from extractor import download_and_unzip_all_trades
+from src.filtered_summary_aggregator import aggregate_filtered_summary_files
 
 
 def parse_arguments():
@@ -31,6 +32,14 @@ def main():
 
     download_and_unzip_all_trades(args.symbol, output_directory, "mochi-trade-analysis", s3_client)
     formatted_trades_dir = os.path.join(output_directory, "trades", "formatted-trades")
+
+    base_output_dir = os.path.join("output", args.symbol, "trades")
+
+    # Define the path for the aggregated CSV file.
+    aggregated_file_path = "output/aggregated_filtered_summary.csv"
+
+
+    aggregate_filtered_summary_files(base_output_dir, aggregated_file_path)
 
 
 if __name__ == "__main__":
