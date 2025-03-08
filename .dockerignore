@@ -1,0 +1,12 @@
+   __pycache__/
+   *.pyc
+   .git/
+   tests/
+   aws-definitions
+   .idea
+   output
+   README.md
+   *.iml
+   .gitignore
+   .venv
+   .github
