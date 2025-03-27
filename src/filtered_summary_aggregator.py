@@ -1,6 +1,7 @@
 # extractor.py (or any other Python module as needed)
 import os
 import pandas as pd
+import re
 
 
 def aggregate_filtered_summary_files(base_output_dir, aggregated_file_path):
@@ -21,22 +22,39 @@ def aggregate_filtered_summary_files(base_output_dir, aggregated_file_path):
 
             try:
                 df = pd.read_csv(file_path)
+
+                # Extract the parameter pattern
+                param_pattern = re.search(r'(s_[^/]+?)(?=/summary|$)', file_path)
+                scenario = param_pattern.group(1) if param_pattern else "unknown_scenario"
+
+                # Add scenario column to the DataFrame - handle both possible column names
+                if 'TraderID' in df.columns:
+                    traderId_idx = df.columns.get_loc('TraderID')
+                    df.insert(traderId_idx + 1, 'Scenario', scenario)
+                elif 'traderId' in df.columns:
+                    traderId_idx = df.columns.get_loc('traderId')
+                    df.insert(traderId_idx + 1, 'Scenario', scenario)
+                else:
+                    # If neither column exists, add the scenario as the first column
+                    df.insert(0, 'Scenario', scenario)
+
                 aggregated_df_list.append(df)
             except Exception as e:
                 print(f"Error reading {file_path}: {e}")
 
-    if aggregated_df_list:
+    if aggregated_df_list and len(aggregated_df_list) > 0:
         # Concatenate all the DataFrames
         combined_df = pd.concat(aggregated_df_list, ignore_index=True)
 
-        # Sort by CompositeScore
-        combined_df.sort_values(by="CompositeScore", inplace=True)
+        # Sort by CompositeScore if it exists
+        if 'CompositeScore' in combined_df.columns:
+            combined_df.sort_values(by="CompositeScore", inplace=True, ascending=False)
 
         # Write the aggregated data to a new CSV file
         combined_df.to_csv(aggregated_file_path, index=False)
         print(f"Aggregated CSV saved to: {aggregated_file_path}")
     else:
-        print("No filtered_summary.csv files found.")
+        print("No filtered_summary.csv files found or all files were empty.")
 
 
 if __name__ == '__main__':
