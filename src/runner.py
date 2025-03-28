@@ -136,6 +136,8 @@ def aggregate_filtered_setup_files(output_file):
     print(f"Total rows: {len(combined_df)}")
     print(f"Columns order: {', '.join(combined_df.columns[:5])}...")  # Print first 5 columns to verify order
 
+    return combined_df
+
 
 def reorder_aggregated_summary(input_file, output_file):
     """
@@ -157,14 +159,75 @@ def reorder_aggregated_summary(input_file, output_file):
             df.to_csv(output_file, index=False)
             print(f"Reordered aggregated summary saved with 'Scenario' as first column to {output_file}")
             print(f"Columns order: {', '.join(df.columns[:5])}...")  # Print first 5 columns to verify order
+            return df
         else:
             print(f"Warning: 'Scenario' column not found in {input_file}")
             # Just copy the file if no reordering is needed
             shutil.copy2(input_file, output_file)
+            return pd.read_csv(input_file)
     except Exception as e:
         print(f"Error reordering aggregated summary: {e}")
         # In case of error, just copy the original file
         shutil.copy2(input_file, output_file)
+        return None
+
+
+def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file):
+    """
+    Sort the filtered setups DataFrame to match the order of scenarios and trader IDs in the summary DataFrame
+    """
+    try:
+        print("Sorting filtered setups to match the order in aggregated summary...")
+
+        # Make sure we have the needed columns
+        if 'scenario' not in filtered_setups_df.columns or 'traderid' not in filtered_setups_df.columns:
+            print("Warning: Required columns not found in filtered setups. Skipping sorting.")
+            return filtered_setups_df
+
+        if 'Scenario' not in summary_df.columns or 'TraderID' not in summary_df.columns:
+            print("Warning: Required columns not found in summary. Skipping sorting.")
+            return filtered_setups_df
+
+        # Create a mapping for sorting
+        # First, create a DataFrame with just Scenario and TraderID from summary
+        order_df = summary_df[['Scenario', 'TraderID']].copy()
+
+        # Add a sort index to preserve the order
+        order_df['sort_order'] = range(len(order_df))
+
+        # Create a merged dataframe to get the sort order
+        # Note: We're using left join to keep all the filtered_setups rows
+        # even if they don't have a match in the summary
+        merged_df = pd.merge(
+            filtered_setups_df,
+            order_df,
+            how='left',
+            left_on=['scenario', 'traderid'],
+            right_on=['Scenario', 'TraderID']
+        )
+
+        # Sort the merged dataframe by the sort order
+        # Use fillna with a large value to push non-matches to the end
+        merged_df = merged_df.sort_values(
+            by='sort_order',
+            na_position='last'
+        )
+
+        # Drop the extra columns from the merge
+        merged_df = merged_df.drop(columns=['Scenario', 'TraderID', 'sort_order'])
+
+        # Save the sorted dataframe
+        merged_df.to_csv(output_file, index=False)
+        print(f"Sorted filtered setups saved to {output_file}")
+        print(f"Total rows: {len(merged_df)}")
+
+        return merged_df
+
+    except Exception as e:
+        print(f"Error sorting filtered setups: {e}")
+        # In case of error, just save the original dataframe
+        filtered_setups_df.to_csv(output_file, index=False)
+        return filtered_setups_df
 
 
 def main():
@@ -200,19 +263,23 @@ def main():
     # Define the path for temporary and final files
     temp_aggregated_file_path = "output/aggregated_filtered_summary.csv"
     final_aggregated_file_path = os.path.join(upload_dir, "aggregated_filtered_summary.csv")
+    temp_filtered_setups_path = "output/temp_filtered_setups.csv"
+    final_filtered_setups_path = os.path.join(upload_dir, "filtered-setups.csv")
 
     # Generate the aggregated filtered summary
     aggregate_filtered_summary_files(base_output_dir, temp_aggregated_file_path)
 
     # Reorder the aggregated summary to put Scenario first and save to upload directory
-    reorder_aggregated_summary(temp_aggregated_file_path, final_aggregated_file_path)
+    summary_df = reorder_aggregated_summary(temp_aggregated_file_path, final_aggregated_file_path)
 
     # Copy graphs to the graphs directory inside upload using the reordered file
     copy_graphs_to_directory(args.symbol, final_aggregated_file_path, graphs_dir)
 
-    # Aggregate all filtered setup files to upload directory
-    filtered_setups_path = os.path.join(upload_dir, "filtered-setups.csv")
-    aggregate_filtered_setup_files(filtered_setups_path)
+    # Aggregate all filtered setup files to a temporary file
+    filtered_setups_df = aggregate_filtered_setup_files(temp_filtered_setups_path)
+
+    # Sort the filtered setups to match the order in the summary and save to upload directory
+    sort_filtered_setups_by_summary(filtered_setups_df, summary_df, final_filtered_setups_path)
 
     # Upload the aggregated CSV file to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
