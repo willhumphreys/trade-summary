@@ -3,9 +3,9 @@ import os
 import shutil
 import csv
 import glob
+import pandas as pd
 
 import boto3
-import pandas as pd
 
 from extractor import download_and_unzip_all_trades
 from src.filtered_summary_aggregator import aggregate_filtered_summary_files
@@ -63,7 +63,8 @@ def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
 
     print(f"Graph copying complete. All graphs copied to {output_graph_dir}")
 
-def aggregate_filtered_setup_files(output_file="filtered-setups.csv"):
+
+def aggregate_filtered_setup_files(output_file):
     """
     Find all filtered setup CSV files and combine them into a single file.
     Files follow the pattern: output/*/trades/*/trades/filtered-*.csv
@@ -85,14 +86,24 @@ def aggregate_filtered_setup_files(output_file="filtered-setups.csv"):
             # Extract symbol and scenario info from the path
             path_parts = file_path.split(os.path.sep)
             symbol = path_parts[1].split("_")[0]  # Extract symbol from directory name
-            scenario = path_parts[3]  # Scenario is the 4th component in the path
+
+            # Extract scenario from the filename part after "filtered-"
+            filename = os.path.basename(file_path)
+            if filename.startswith("filtered-"):
+                scenario = filename[len("filtered-"):].rsplit('.', 1)[
+                    0]  # Remove "filtered-" prefix and ".csv" extension
+            else:
+                # Fallback to extracting from the directory path
+                scenario = path_parts[3]
+
+            print(f"Extracted scenario: {scenario}")
 
             # Read the CSV file
             df = pd.read_csv(file_path)
 
-            # Add symbol and scenario columns
+            # Add scenario column as first column, and symbol column
+            df.insert(0, 'scenario', scenario)  # Insert scenario as the first column
             df['Symbol'] = symbol
-            df['Scenario'] = scenario
 
             dfs.append(df)
             print(f"Added data from {file_path}")
@@ -106,10 +117,24 @@ def aggregate_filtered_setup_files(output_file="filtered-setups.csv"):
     # Combine all dataframes
     combined_df = pd.concat(dfs, ignore_index=True)
 
+    # If the DataFrame has an unnamed index column, drop it
+    if any(col.startswith('Unnamed: 0') for col in combined_df.columns):
+        drop_cols = [col for col in combined_df.columns if col.startswith('Unnamed: 0')]
+        combined_df = combined_df.drop(columns=drop_cols)
+
+    # Reorder columns if 'rank' exists to ensure scenario is first, then rank
+    if 'rank' in combined_df.columns:
+        cols = combined_df.columns.tolist()
+        cols.remove('rank')
+        cols.remove('scenario')
+        cols = ['scenario', 'rank'] + cols
+        combined_df = combined_df[cols]
+
     # Save the combined data
     combined_df.to_csv(output_file, index=False)
     print(f"Aggregated filtered setup data saved to {output_file}")
     print(f"Total rows: {len(combined_df)}")
+    print(f"Columns order: {', '.join(combined_df.columns[:5])}...")  # Print first 5 columns to verify order
 
 
 def main():
@@ -120,6 +145,15 @@ def main():
         shutil.rmtree(output_dir)
     os.makedirs(output_dir, exist_ok=True)
     print(f"Created fresh '{output_dir}' directory.")
+
+    # Create upload directory
+    upload_dir = os.path.join(output_dir, "upload")
+    os.makedirs(upload_dir, exist_ok=True)
+    print(f"Created '{upload_dir}' directory for final outputs.")
+
+    # Create graphs directory inside upload directory
+    graphs_dir = os.path.join(upload_dir, "graphs")
+    os.makedirs(graphs_dir, exist_ok=True)
 
     args = parse_arguments()
     output_directory = os.path.join(output_dir, args.symbol)
@@ -133,31 +167,37 @@ def main():
 
     base_output_dir = os.path.join("output", args.symbol, "trades")
 
-    # Define the path for the aggregated CSV file.
-    aggregated_file_path = "output/aggregated_filtered_summary.csv"
+    # Define the path for the temporary and final aggregated CSV files
+    temp_aggregated_file_path = "output/aggregated_filtered_summary.csv"
+    final_aggregated_file_path = os.path.join(upload_dir, "aggregated_filtered_summary.csv")
 
-    aggregate_filtered_summary_files(base_output_dir, aggregated_file_path)
+    # Generate the aggregated filtered summary
+    aggregate_filtered_summary_files(base_output_dir, temp_aggregated_file_path)
 
-    # Create a directory for consolidated graphs
-    graphs_directory = "graphs"
-    copy_graphs_to_directory(args.symbol, aggregated_file_path, graphs_directory)
+    # Copy graphs to the graphs directory inside upload
+    copy_graphs_to_directory(args.symbol, temp_aggregated_file_path, graphs_dir)
 
-    # Aggregate all filtered setup files
-    aggregate_filtered_setup_files()
+    # Aggregate all filtered setup files to upload directory
+    filtered_setups_path = os.path.join(upload_dir, "filtered-setups.csv")
+    aggregate_filtered_setup_files(filtered_setups_path)
 
+    # Copy the aggregated_filtered_summary.csv to upload directory
+    shutil.copy2(temp_aggregated_file_path, final_aggregated_file_path)
+    print(f"Copied: {temp_aggregated_file_path} -> {final_aggregated_file_path}")
 
     # Upload the aggregated CSV file to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
     s3_key = f"{args.symbol}/aggregated_filtered_summary.csv"
-    print(f"Uploading {aggregated_file_path} to s3://{s3_bucket}/{s3_key}...")
+    print(f"Uploading {final_aggregated_file_path} to s3://{s3_bucket}/{s3_key}...")
 
     s3_client.upload_file(
-        Filename=aggregated_file_path,
+        Filename=final_aggregated_file_path,
         Bucket=s3_bucket,
         Key=s3_key
     )
 
     print(f"Upload complete. File available at s3://{s3_bucket}/{s3_key}")
+    print(f"All aggregated files and graphs are available in the '{upload_dir}' directory.")
 
 
 if __name__ == "__main__":
