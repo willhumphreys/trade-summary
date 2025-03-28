@@ -137,6 +137,36 @@ def aggregate_filtered_setup_files(output_file):
     print(f"Columns order: {', '.join(combined_df.columns[:5])}...")  # Print first 5 columns to verify order
 
 
+def reorder_aggregated_summary(input_file, output_file):
+    """
+    Reorder the columns in the aggregated filtered summary to make Scenario first
+    """
+    try:
+        # Read the CSV file
+        df = pd.read_csv(input_file)
+
+        # Check if 'Scenario' column exists
+        if 'Scenario' in df.columns:
+            # Reorder columns to put 'Scenario' first
+            cols = df.columns.tolist()
+            cols.remove('Scenario')
+            cols = ['Scenario'] + cols
+            df = df[cols]
+
+            # Save the reordered DataFrame
+            df.to_csv(output_file, index=False)
+            print(f"Reordered aggregated summary saved with 'Scenario' as first column to {output_file}")
+            print(f"Columns order: {', '.join(df.columns[:5])}...")  # Print first 5 columns to verify order
+        else:
+            print(f"Warning: 'Scenario' column not found in {input_file}")
+            # Just copy the file if no reordering is needed
+            shutil.copy2(input_file, output_file)
+    except Exception as e:
+        print(f"Error reordering aggregated summary: {e}")
+        # In case of error, just copy the original file
+        shutil.copy2(input_file, output_file)
+
+
 def main():
     # Clean up the output directory
     output_dir = "output"
@@ -167,23 +197,22 @@ def main():
 
     base_output_dir = os.path.join("output", args.symbol, "trades")
 
-    # Define the path for the temporary and final aggregated CSV files
+    # Define the path for temporary and final files
     temp_aggregated_file_path = "output/aggregated_filtered_summary.csv"
     final_aggregated_file_path = os.path.join(upload_dir, "aggregated_filtered_summary.csv")
 
     # Generate the aggregated filtered summary
     aggregate_filtered_summary_files(base_output_dir, temp_aggregated_file_path)
 
-    # Copy graphs to the graphs directory inside upload
-    copy_graphs_to_directory(args.symbol, temp_aggregated_file_path, graphs_dir)
+    # Reorder the aggregated summary to put Scenario first and save to upload directory
+    reorder_aggregated_summary(temp_aggregated_file_path, final_aggregated_file_path)
+
+    # Copy graphs to the graphs directory inside upload using the reordered file
+    copy_graphs_to_directory(args.symbol, final_aggregated_file_path, graphs_dir)
 
     # Aggregate all filtered setup files to upload directory
     filtered_setups_path = os.path.join(upload_dir, "filtered-setups.csv")
     aggregate_filtered_setup_files(filtered_setups_path)
-
-    # Copy the aggregated_filtered_summary.csv to upload directory
-    shutil.copy2(temp_aggregated_file_path, final_aggregated_file_path)
-    print(f"Copied: {temp_aggregated_file_path} -> {final_aggregated_file_path}")
 
     # Upload the aggregated CSV file to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
