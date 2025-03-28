@@ -298,13 +298,13 @@ def add_rank_column_to_summary(df):
     """
     if df is not None:
         print("Adding rank column to summary...")
-        # Check if Scenario is already the first column
-        if df.columns[0] == 'Scenario':
-            # Insert after Scenario
-            df.insert(1, 'Rank', range(1, len(df) + 1))
-        else:
+        # # Check if Scenario is already the first column
+        # if df.columns[0] == 'Scenario':
+        #     # Insert after Scenario
+        #     df.insert(1, 'Rank', range(1, len(df) + 1))
+        # else:
             # Insert as first column
-            df.insert(0, 'Rank', range(1, len(df) + 1))
+        df.insert(0, 'Rank', range(1, len(df) + 1))
         return df
     return None
 
