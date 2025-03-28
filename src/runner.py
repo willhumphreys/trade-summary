@@ -384,19 +384,34 @@ def main():
     # Note: This already includes a rank-like column as the first column
     create_setups_file(filtered_setups_with_rank_df, final_setups_path)
 
-    # Upload the aggregated CSV file to S3
+        # Upload all files from the upload directory to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
-    s3_key = f"{args.symbol}/aggregated_filtered_summary.csv"
-    print(f"Uploading {final_aggregated_file_path} to s3://{s3_bucket}/{s3_key}...")
+    base_s3_key = args.symbol
 
-    s3_client.upload_file(
-        Filename=final_aggregated_file_path,
-        Bucket=s3_bucket,
-        Key=s3_key
-    )
+    print(f"Uploading contents of '{upload_dir}' to s3://{s3_bucket}/{base_s3_key}/...")
 
-    print(f"Upload complete. File available at s3://{s3_bucket}/{s3_key}")
-    print(f"All aggregated files and graphs are available in the '{upload_dir}' directory.")
+    # Walk through the upload directory
+    for root, dirs, files in os.walk(upload_dir):
+        for filename in files:
+            # Get the local file path
+            local_path = os.path.join(root, filename)
+
+            # Calculate the relative path from the upload directory
+            relative_path = os.path.relpath(local_path, upload_dir)
+
+            # Create the S3 key by joining the base key with the relative path
+            s3_key = f"{base_s3_key}/{relative_path}"
+
+            print(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}...")
+
+            # Upload the file
+            s3_client.upload_file(
+                Filename=local_path,
+                Bucket=s3_bucket,
+                Key=s3_key
+            )
+
+    print(f"Upload complete. All files from '{upload_dir}' uploaded to s3://{s3_bucket}/{base_s3_key}/")
 
 
 if __name__ == "__main__":
