@@ -5,6 +5,7 @@ import csv
 import glob
 
 import boto3
+import pandas as pd
 
 from extractor import download_and_unzip_all_trades
 from src.filtered_summary_aggregator import aggregate_filtered_summary_files
@@ -62,6 +63,54 @@ def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
 
     print(f"Graph copying complete. All graphs copied to {output_graph_dir}")
 
+def aggregate_filtered_setup_files(output_file="filtered-setups.csv"):
+    """
+    Find all filtered setup CSV files and combine them into a single file.
+    Files follow the pattern: output/*/trades/*/trades/filtered-*.csv
+    """
+    # Find all filtered setup files
+    file_pattern = os.path.join("output", "*", "trades", "*", "trades", "filtered-*.csv")
+    setup_files = glob.glob(file_pattern)
+
+    if not setup_files:
+        print("No filtered setup files found.")
+        return
+
+    print(f"Found {len(setup_files)} filtered setup files to aggregate.")
+
+    # Read and combine all files
+    dfs = []
+    for file_path in setup_files:
+        try:
+            # Extract symbol and scenario info from the path
+            path_parts = file_path.split(os.path.sep)
+            symbol = path_parts[1].split("_")[0]  # Extract symbol from directory name
+            scenario = path_parts[3]  # Scenario is the 4th component in the path
+
+            # Read the CSV file
+            df = pd.read_csv(file_path)
+
+            # Add symbol and scenario columns
+            df['Symbol'] = symbol
+            df['Scenario'] = scenario
+
+            dfs.append(df)
+            print(f"Added data from {file_path}")
+        except Exception as e:
+            print(f"Error processing {file_path}: {e}")
+
+    if not dfs:
+        print("No valid data found in any files.")
+        return
+
+    # Combine all dataframes
+    combined_df = pd.concat(dfs, ignore_index=True)
+
+    # Save the combined data
+    combined_df.to_csv(output_file, index=False)
+    print(f"Aggregated filtered setup data saved to {output_file}")
+    print(f"Total rows: {len(combined_df)}")
+
 
 def main():
     # Clean up the output directory
@@ -92,6 +141,10 @@ def main():
     # Create a directory for consolidated graphs
     graphs_directory = "graphs"
     copy_graphs_to_directory(args.symbol, aggregated_file_path, graphs_directory)
+
+    # Aggregate all filtered setup files
+    aggregate_filtered_setup_files()
+
 
     # Upload the aggregated CSV file to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
