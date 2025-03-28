@@ -230,6 +230,85 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
         return filtered_setups_df
 
 
+def create_setups_file(filtered_setups_df, output_file):
+    """
+    Create a simplified setups.csv file with only specific columns and formatting
+    """
+    try:
+        print("Creating simplified setups.csv file...")
+
+        # Check if filtered_setups_df has all the required columns
+        required_columns = ['traderid', 'dayofweek', 'hourofday', 'stop', 'limit', 'tickoffset', 'tradeduration',
+                            'outoftime']
+
+        # Check for any missing columns
+        missing_columns = [col for col in required_columns if col not in filtered_setups_df.columns]
+
+        if missing_columns:
+            # Special case for 'hourofday' column which might have a comment
+            if 'hourofday' in missing_columns:
+                possible_hourofday_columns = [col for col in filtered_setups_df.columns if col.startswith('hourofday')]
+                if possible_hourofday_columns:
+                    # Use the first matching column as 'hourofday'
+                    filtered_setups_df = filtered_setups_df.rename(columns={possible_hourofday_columns[0]: 'hourofday'})
+                    missing_columns.remove('hourofday')
+
+            if missing_columns:
+                print(f"Warning: Missing required columns in filtered setups: {missing_columns}")
+                return None
+
+        # Extract only the required columns
+        setups_df = filtered_setups_df[required_columns].copy()
+
+        # Add a sequential row number as the first column
+        setups_df.insert(0, '', range(1, len(setups_df) + 1))
+
+        # Format the 'hourofday' column to include the file comment if not already present
+        if ' #file:runner.py ' not in str(setups_df['hourofday'].iloc[0]):
+            setups_df = setups_df.rename(columns={'hourofday': 'hourofday #file:runner.py '})
+
+        # Save the dataframe with the specified format
+        # Use quoting=csv.QUOTE_ALL to quote all fields
+        setups_df.to_csv(output_file, index=False, quoting=csv.QUOTE_ALL)
+
+        print(f"Simplified setups file created at {output_file}")
+        print(f"Total rows: {len(setups_df)}")
+
+        return setups_df
+
+    except Exception as e:
+        print(f"Error creating setups file: {e}")
+        return None
+
+
+def add_rank_column_to_filtered_setups(df):
+    """
+    Add a rank column as the first column to the filtered setups DataFrame
+    """
+    if df is not None:
+        print("Adding rank column to filtered setups...")
+        df.insert(0, 'Rank', range(1, len(df) + 1))
+        return df
+    return None
+
+
+def add_rank_column_to_summary(df):
+    """
+    Add a rank column as the first column to the summary DataFrame
+    """
+    if df is not None:
+        print("Adding rank column to summary...")
+        # Check if Scenario is already the first column
+        if df.columns[0] == 'Scenario':
+            # Insert after Scenario
+            df.insert(1, 'Rank', range(1, len(df) + 1))
+        else:
+            # Insert as first column
+            df.insert(0, 'Rank', range(1, len(df) + 1))
+        return df
+    return None
+
+
 def main():
     # Clean up the output directory
     output_dir = "output"
@@ -262,24 +341,48 @@ def main():
 
     # Define the path for temporary and final files
     temp_aggregated_file_path = "output/aggregated_filtered_summary.csv"
+    temp_aggregated_with_rank_path = "output/aggregated_filtered_summary_with_rank.csv"
     final_aggregated_file_path = os.path.join(upload_dir, "aggregated_filtered_summary.csv")
     temp_filtered_setups_path = "output/temp_filtered_setups.csv"
+    temp_sorted_filtered_setups_path = "output/sorted_filtered_setups.csv"
     final_filtered_setups_path = os.path.join(upload_dir, "filtered-setups.csv")
+    final_setups_path = os.path.join(upload_dir, "setups.csv")
 
     # Generate the aggregated filtered summary
     aggregate_filtered_summary_files(base_output_dir, temp_aggregated_file_path)
 
-    # Reorder the aggregated summary to put Scenario first and save to upload directory
-    summary_df = reorder_aggregated_summary(temp_aggregated_file_path, final_aggregated_file_path)
+    # Reorder the aggregated summary to put Scenario first
+    summary_df = reorder_aggregated_summary(temp_aggregated_file_path, temp_aggregated_with_rank_path)
 
-    # Copy graphs to the graphs directory inside upload using the reordered file
+    # Add rank column to summary
+    summary_with_rank_df = add_rank_column_to_summary(summary_df)
+
+    # Save the summary with rank to the final path
+    if summary_with_rank_df is not None:
+        summary_with_rank_df.to_csv(final_aggregated_file_path, index=False)
+        print(f"Saved summary with rank to {final_aggregated_file_path}")
+
+    # Copy graphs to the graphs directory inside upload using the final file
     copy_graphs_to_directory(args.symbol, final_aggregated_file_path, graphs_dir)
 
     # Aggregate all filtered setup files to a temporary file
     filtered_setups_df = aggregate_filtered_setup_files(temp_filtered_setups_path)
 
-    # Sort the filtered setups to match the order in the summary and save to upload directory
-    sort_filtered_setups_by_summary(filtered_setups_df, summary_df, final_filtered_setups_path)
+    # Sort the filtered setups to match the order in the summary
+    sorted_filtered_setups_df = sort_filtered_setups_by_summary(filtered_setups_df, summary_with_rank_df,
+                                                                temp_sorted_filtered_setups_path)
+
+    # Add rank column to filtered setups
+    filtered_setups_with_rank_df = add_rank_column_to_filtered_setups(sorted_filtered_setups_df)
+
+    # Save the filtered setups with rank to the final path
+    if filtered_setups_with_rank_df is not None:
+        filtered_setups_with_rank_df.to_csv(final_filtered_setups_path, index=False)
+        print(f"Saved filtered setups with rank to {final_filtered_setups_path}")
+
+    # Create the simplified setups.csv file
+    # Note: This already includes a rank-like column as the first column
+    create_setups_file(filtered_setups_with_rank_df, final_setups_path)
 
     # Upload the aggregated CSV file to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
