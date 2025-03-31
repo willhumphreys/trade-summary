@@ -17,14 +17,18 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
+def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir, output_trades_dir):
     """
     Copy graphs from their original locations to a consolidated graphs directory
     based on entries in the aggregated_filtered_summary.csv
+    :param output_trades_dir: 
     """
     # Create graphs directory if it doesn't exist
     os.makedirs(output_graph_dir, exist_ok=True)
     print(f"Created '{output_graph_dir}' directory for consolidated graphs.")
+
+    os.makedirs(output_trades_dir, exist_ok=True)
+    print(f"Created '{output_trades_dir}' directory for consolidated trades.")
 
     # Read the aggregated summary file
     with open(aggregated_file_path, 'r') as csvfile:
@@ -35,7 +39,7 @@ def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
             scenario = row['Scenario']
 
             # Construct the source path pattern to find the graph
-            source_pattern = os.path.join(
+            graph_source_pattern = os.path.join(
                 "output",
                 f"{symbol}*",
                 "trades",
@@ -45,7 +49,7 @@ def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
             )
 
             # Find all files matching the pattern
-            matching_files = glob.glob(source_pattern)
+            matching_files = glob.glob(graph_source_pattern)
 
             if matching_files:
                 for source_file in matching_files:
@@ -54,14 +58,40 @@ def copy_graphs_to_directory(symbol, aggregated_file_path, output_graph_dir):
                         output_graph_dir,
                         f"{symbol}_{scenario}_{trader_id}.png"
                     )
-
                     # Copy the file
                     shutil.copy2(source_file, destination_file)
                     print(f"Copied: {source_file} -> {destination_file}")
             else:
                 print(f"Warning: No graph found for trader {trader_id} in scenario {scenario}")
 
-    print(f"Graph copying complete. All graphs copied to {output_graph_dir}")
+            # Construct the source path pattern to find the graph
+            trade_source_pattern = os.path.join(
+                "output",
+                f"{symbol}*",
+                "trades",
+                scenario,
+                "trades",
+                "formatted-trades",
+                f"{trader_id}.csv"
+            )
+
+            # Find all files matching the pattern
+            matching_trades_files = glob.glob(trade_source_pattern)
+
+            if matching_trades_files:
+                for trade_source_file in matching_trades_files:
+                    # Create destination filename
+                    destination_file = os.path.join(
+                        output_trades_dir,
+                        f"{symbol}_{scenario}_{trader_id}.csv"
+                    )
+                    # Copy the file
+                    shutil.copy2(trade_source_file, destination_file)
+                    print(f"Copied: {trade_source_file} -> {destination_file}")
+            else:
+                print(f"Warning: No trades found for trader {trader_id} in scenario {scenario}")
+
+    print(f"Trade and graph copying complete. All trades copied to {output_graph_dir} and {output_trades_dir}")
 
 
 def aggregate_filtered_setup_files(output_file):
@@ -327,6 +357,9 @@ def main():
     graphs_dir = os.path.join(upload_dir, "graphs")
     os.makedirs(graphs_dir, exist_ok=True)
 
+    trades_dir = os.path.join(upload_dir, "trades")
+    os.makedirs(trades_dir, exist_ok=True)
+
     args = parse_arguments()
     output_directory = os.path.join(output_dir, args.symbol)
 
@@ -363,7 +396,7 @@ def main():
         print(f"Saved summary with rank to {final_aggregated_file_path}")
 
     # Copy graphs to the graphs directory inside upload using the final file
-    copy_graphs_to_directory(args.symbol, final_aggregated_file_path, graphs_dir)
+    copy_graphs_to_directory(args.symbol, final_aggregated_file_path, graphs_dir, trades_dir)
 
     # Aggregate all filtered setup files to a temporary file
     filtered_setups_df = aggregate_filtered_setup_files(temp_filtered_setups_path)
