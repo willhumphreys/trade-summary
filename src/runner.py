@@ -139,10 +139,11 @@ def aggregate_filtered_setup_files(output_file):
             print(f"Added data from {file_path}")
         except Exception as e:
             print(f"Error processing {file_path}: {e}")
+            raise Exception(f"Error processing {file_path}: {e}")
 
     if not dfs:
         print("No valid data found in any files.")
-        return
+        raise Exception("No valid data found in any files.")
 
     # Combine all dataframes
     combined_df = pd.concat(dfs, ignore_index=True)
@@ -210,7 +211,7 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
         print("Sorting filtered setups to match the order in aggregated summary...")
 
         # Make sure we have the needed columns
-        if 'scenario' not in filtered_setups_df.columns or 'traderid' not in filtered_setups_df.columns:
+        if 'Scenario' not in filtered_setups_df.columns or 'traderid' not in filtered_setups_df.columns:
             print("Warning: Required columns not found in filtered setups. Skipping sorting.")
             return filtered_setups_df
 
