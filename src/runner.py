@@ -211,46 +211,64 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
         print("Sorting filtered setups to match the order in aggregated summary...")
 
         # Make sure we have the needed columns
-        if 'Scenario' not in filtered_setups_df.columns or 'traderid' not in filtered_setups_df.columns:
-            print("Warning: Required columns not found in filtered setups. Skipping sorting.")
+        if 'scenario' not in filtered_setups_df.columns or 'traderid' not in filtered_setups_df.columns:
+            print("Warning: Required columns ('scenario', 'traderid') not found in filtered setups. Skipping sorting.")
+            # Save the original dataframe if columns are missing
+            filtered_setups_df.to_csv(output_file, index=False)
             return filtered_setups_df
 
         if 'Scenario' not in summary_df.columns or 'TraderID' not in summary_df.columns:
-            print("Warning: Required columns not found in summary. Skipping sorting.")
+            print("Warning: Required columns ('Scenario', 'TraderID') not found in summary. Skipping sorting.")
+            # Save the original dataframe if columns are missing
+            filtered_setups_df.to_csv(output_file, index=False)
             return filtered_setups_df
 
         # Create a mapping for sorting
         # First, create a DataFrame with just Scenario and TraderID from summary
         order_df = summary_df[['Scenario', 'TraderID']].copy()
 
-        # Add a sort index to preserve the order
+        # ---- START CHANGE ----
+        # Rename summary columns to lowercase to match filtered_setups_df for the merge
+        order_df.rename(columns={'Scenario': 'scenario', 'TraderID': 'traderid'}, inplace=True)
+        # ---- END CHANGE ----
+
+
+        # Add a sort index to preserve the order from the summary
         order_df['sort_order'] = range(len(order_df))
 
         # Create a merged dataframe to get the sort order
-        # Note: We're using left join to keep all the filtered_setups rows
-        # even if they don't have a match in the summary
+        # Use left join to keep all the filtered_setups rows
+        # Now we can use 'on' because the column names match
         merged_df = pd.merge(
             filtered_setups_df,
             order_df,
             how='left',
-            left_on=['scenario', 'traderid'],
-            right_on=['Scenario', 'TraderID']
+            on=['scenario', 'traderid'] # Use 'on' now that names match
         )
+
+        # Check for rows that didn't merge (indicating potential data mismatches)
+        unmerged_count = merged_df['sort_order'].isna().sum()
+        if unmerged_count > 0:
+            print(f"Warning: {unmerged_count} rows in filtered setups did not find a match in the summary.")
 
         # Sort the merged dataframe by the sort order
-        # Use fillna with a large value to push non-matches to the end
+        # Use fillna with a large value to push non-matches (NaNs) to the end
         merged_df = merged_df.sort_values(
             by='sort_order',
-            na_position='last'
+            na_position='last' # Keep non-matched rows at the end
         )
 
-        # Drop the extra columns from the merge
-        merged_df = merged_df.drop(columns=['Scenario', 'TraderID', 'sort_order'])
+        # Drop the extra column used for sorting
+        merged_df = merged_df.drop(columns=['sort_order'])
 
         # Save the sorted dataframe
         merged_df.to_csv(output_file, index=False)
         print(f"Sorted filtered setups saved to {output_file}")
         print(f"Total rows: {len(merged_df)}")
+        if unmerged_count > 0:
+            print(f"Note: {unmerged_count} rows without a summary match are placed at the end.")
+            raise Exception(f"Warning: {unmerged_count} rows without a summary match are placed at the end.")
+
 
         return merged_df
 
@@ -259,7 +277,6 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
         # In case of error, just save the original dataframe
         filtered_setups_df.to_csv(output_file, index=False)
         return filtered_setups_df
-
 
 def create_setups_file(filtered_setups_df, output_file):
     """
