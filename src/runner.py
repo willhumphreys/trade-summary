@@ -250,6 +250,7 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
         unmerged_count = merged_df['sort_order'].isna().sum()
         if unmerged_count > 0:
             print(f"Warning: {unmerged_count} rows in filtered setups did not find a match in the summary.")
+            raise Exception(f"Warning: {unmerged_count} rows in filtered setups did not find a match in the summary.")
 
         # Sort the merged dataframe by the sort order
         # Use fillna with a large value to push non-matches (NaNs) to the end
