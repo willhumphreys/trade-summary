@@ -146,8 +146,14 @@ def aggregate_filtered_setup_files(output_file):
             dfs.append(df)
             print(f"Added data from {file_path}")
         except Exception as e:
-            print(f"Error processing {file_path}: {e}")
-            raise Exception(f"Error processing {file_path}: {e}")
+            # Check if the error message indicates an empty or unparsable CSV file
+            if "No columns to parse from file" in str(e):
+                print(f"Warning: Skipping empty or unparsable file {file_path}. Reason: {e}")
+                continue  # Skip to the next file in the loop
+            else:
+                # For any other type of exception, print the error and re-raise it
+                print(f"Error processing {file_path}: {e}")
+                raise Exception(f"Error processing {file_path}: {e}")
 
     if not dfs:
         print("No valid data found in any files.")
@@ -231,11 +237,8 @@ def sort_filtered_setups_by_summary(filtered_setups_df, summary_df, output_file)
     # First, create a DataFrame with just Scenario and TraderID from summary
     order_df = summary_df[['Scenario', 'TraderID']].copy()
 
-    # ---- START CHANGE ----
     # Rename summary columns to lowercase to match filtered_setups_df for the merge
     order_df.rename(columns={'Scenario': 'scenario', 'TraderID': 'traderid'}, inplace=True)
-    # ---- END CHANGE ----
-
 
     # Add a sort index to preserve the order from the summary
     order_df['sort_order'] = range(len(order_df))
