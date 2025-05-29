@@ -20,6 +20,10 @@ def parse_arguments():
         action="store_true", # Sets args.skip_download to True if flag is present
         help="If set, skip deleting the output directory and downloading/unzipping files."
     )
+    parser.add_argument(
+        "--back_test_id",
+        help="Back test ID for the current run."
+    )
     # Add other arguments if they exist
     return parser.parse_args()
 
@@ -359,6 +363,10 @@ def add_rank_column_to_summary(df):
 
 def main():
     args = parse_arguments() # Parse arguments first
+
+    # Log the back_test_id if provided
+    if hasattr(args, 'back_test_id') and args.back_test_id:
+        print(f"Back test ID: {args.back_test_id}")
 
     output_dir = "output"
 
