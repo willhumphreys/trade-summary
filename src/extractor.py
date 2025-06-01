@@ -3,7 +3,7 @@ import os
 import zipfile
 
 
-def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client):
+def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client, back_test_id=None):
     """
     Downloads all the trade archives (ZIP files) for the specified symbol from the given S3 bucket.
     For each archive, it saves the ZIP file to an archive directory and unzips it into its own subdirectory under 'trades'.
@@ -12,10 +12,11 @@ def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client):
     :param symbol: The symbol name (e.g. "btc-1mF")
     :param output_dir: The base output directory where archives and extracted files will be saved.
     :param bucket_name: The S3 bucket containing the archives.
+    :param back_test_id: The back test ID to prefix S3 keys with.
     """
 
-    # List all objects under the given symbol
-    prefix = f"{symbol}/"
+    # List all objects under the given symbol, prefixed with back_test_id if provided
+    prefix = f"{back_test_id}/{symbol}/" if back_test_id else f"{symbol}/"
     response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
 
     if "Contents" not in response:

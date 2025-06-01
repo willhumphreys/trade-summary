@@ -8,7 +8,7 @@ import pandas as pd
 import boto3
 
 from extractor import download_and_unzip_all_trades
-from src.filtered_summary_aggregator import aggregate_filtered_summary_files
+from filtered_summary_aggregator import aggregate_filtered_summary_files
 
 
 def parse_arguments():
@@ -404,7 +404,7 @@ def main():
     if not args.skip_download:
         print("Proceeding with download and extraction...")
         # Make sure download_and_unzip_all_trades is defined or imported correctly
-        download_and_unzip_all_trades(args.symbol, output_directory, "mochi-prod-trade-performance-graphs", s3_client)
+        download_and_unzip_all_trades(args.symbol, output_directory, "mochi-prod-trade-performance-graphs", s3_client, args.back_test_id)
     else:
         print(f"Skipping download and extraction for {args.symbol} as --skip-download is set.")
 
@@ -467,7 +467,8 @@ def main():
 
     # Upload all files from the upload directory to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
-    base_s3_key = args.symbol
+    # Prefix base_s3_key with back_test_id if provided
+    base_s3_key = f"{args.back_test_id}/{args.symbol}" if args.back_test_id else args.symbol
 
     print(f"Uploading contents of '{upload_dir}' to s3://{s3_bucket}/{base_s3_key}/...")
 
