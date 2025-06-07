@@ -3,7 +3,7 @@ import os
 import zipfile
 
 
-def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client, back_test_id=None):
+def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client):
     """
     Downloads all the trade archives (ZIP files) for the specified symbol from the given S3 bucket.
     For each archive, it saves the ZIP file to an archive directory and unzips it into its own subdirectory under 'trades'.
@@ -12,12 +12,25 @@ def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client, ba
     :param symbol: The symbol name (e.g. "btc-1mF")
     :param output_dir: The base output directory where archives and extracted files will be saved.
     :param bucket_name: The S3 bucket containing the archives.
-    :param back_test_id: The back test ID to prefix S3 keys with.
     """
 
-    # List all objects under the given symbol, prefixed with back_test_id if provided
-    prefix = f"{back_test_id}/{symbol}/" if back_test_id else f"{symbol}/"
-    response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+
+    # Directly list all objects in the bucket
+    response = s3_client.list_objects_v2(Bucket=bucket_name)
+
+    # Filter for keys that contain the symbol in the path
+    if "Contents" in response:
+        filtered_contents = []
+        for obj in response["Contents"]:
+            key = obj["Key"]
+            # Check if the key contains the symbol
+            if f"/{symbol}/" in key:
+                filtered_contents.append(obj)
+
+        if filtered_contents:
+            response = {"Contents": filtered_contents}
+        else:
+            response = {}
 
     if "Contents" not in response:
         print(f"No files found under symbol: {symbol}")
@@ -33,8 +46,17 @@ def download_and_unzip_all_trades(symbol, output_dir, bucket_name, s3_client, ba
         if not key.endswith(".zip"):
             continue
 
-        # Extract scenario name from the file name (e.g. "scenario1.zip" -> "scenario1")
-        scenario = os.path.splitext(os.path.basename(key))[0]
+        # Extract scenario name from the file name with the new structure
+        # New key looks like: raspberry-iguana--20250605125937/C:XAUUSD_polygon_min/s_-25420..-1059..2118___l_28593..52954..2118___o_115..4546..211___d_14..14..7___out_8..8..4.zip
+        key_parts = key.split('/')
+
+        # Extract the backTestId and scenario parts
+        back_test_id_from_key = key_parts[-3] if len(key_parts) >= 3 else ""  # Get the backTestId part
+        scenario_params = os.path.splitext(key_parts[-1])[0]  # Get the scenario parameters without .zip extension
+
+        # Create the new scenario format: backTestId___scenario_params
+        scenario = f"{back_test_id_from_key}___{scenario_params}" if back_test_id_from_key and back_test_id_from_key != symbol else scenario_params
+
         local_zip_file = os.path.join(archives_dir, f"{scenario}.zip")
 
         print(f"Downloading s3://{bucket_name}/{key} to {local_zip_file} ...")

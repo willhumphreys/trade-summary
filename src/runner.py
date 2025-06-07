@@ -20,10 +20,6 @@ def parse_arguments():
         action="store_true", # Sets args.skip_download to True if flag is present
         help="If set, skip deleting the output directory and downloading/unzipping files."
     )
-    parser.add_argument(
-        "--back_test_id",
-        help="Back test ID for the current run."
-    )
     # Add other arguments if they exist
     return parser.parse_args()
 
@@ -110,6 +106,7 @@ def aggregate_filtered_setup_files(output_file):
     """
     Find all filtered setup CSV files and combine them into a single file.
     Files follow the pattern: output/*/trades/*/trades/filtered-*.csv
+    The back_test_id will always be in downloaded keys.
     """
     # Find all filtered setup files
     file_pattern = os.path.join("output", "*", "trades", "*", "trades", "filtered-*.csv")
@@ -129,14 +126,19 @@ def aggregate_filtered_setup_files(output_file):
             path_parts = file_path.split(os.path.sep)
             symbol = path_parts[1].split("_")[0]  # Extract symbol from directory name
 
-            # Extract scenario from the filename part after "filtered-"
-            filename = os.path.basename(file_path)
-            if filename.startswith("filtered-"):
-                scenario = filename[len("filtered-"):].rsplit('.', 1)[
-                    0]  # Remove "filtered-" prefix and ".csv" extension
+            # Extract scenario from the directory path
+            # The directory structure is: output/symbol/trades/backTestId___scenario_params/trades/filtered-*.csv
+            # The scenario is the part after 'trades' and before the next 'trades'
+            if 'trades' in path_parts:
+                # Find the first occurrence of 'trades' in the path
+                trades_index = path_parts.index('trades')
+                # The scenario should be the part after the first 'trades'
+                if trades_index + 1 < len(path_parts):
+                    scenario = path_parts[trades_index + 1]
+                else:
+                    scenario = "unknown_scenario"
             else:
-                # Fallback to extracting from the directory path
-                scenario = path_parts[3]
+                scenario = "unknown_scenario"
 
             print(f"Extracted scenario: {scenario}")
 
@@ -364,9 +366,9 @@ def add_rank_column_to_summary(df):
 def main():
     args = parse_arguments() # Parse arguments first
 
-    # Log the back_test_id if provided
-    if hasattr(args, 'back_test_id') and args.back_test_id:
-        print(f"Back test ID: {args.back_test_id}")
+
+    # No longer using back_test_id as we're summarizing all back_test_ids
+    print("Processing all back test IDs for the symbol")
 
     output_dir = "output"
 
@@ -404,14 +406,17 @@ def main():
     if not args.skip_download:
         print("Proceeding with download and extraction...")
         # Make sure download_and_unzip_all_trades is defined or imported correctly
-        download_and_unzip_all_trades(args.symbol, output_directory, "mochi-prod-trade-performance-graphs", s3_client, args.back_test_id)
+        # Passing None for back_test_id to process all back test IDs
+        download_and_unzip_all_trades(args.symbol, output_directory, "mochi-prod-trade-performance-graphs", s3_client)
     else:
         print(f"Skipping download and extraction for {args.symbol} as --skip-download is set.")
 
     # --- The rest of the main function remains largely the same ---
     # Define paths relative to the potentially existing structure
     formatted_trades_dir = os.path.join(output_directory, "trades", "formatted-trades")
-    base_output_dir = os.path.join("output", args.symbol, "trades") # This path depends on download structure
+    # The base_output_dir should be the parent directory of all the scenario directories
+    # Since the files are extracted to output/[symbol]/trades/[scenario]
+    base_output_dir = os.path.join("output", args.symbol) # This path depends on download structure
 
     # Define the path for temporary and final files
     # Using os.path.join for better cross-platform compatibility
@@ -467,8 +472,8 @@ def main():
 
     # Upload all files from the upload directory to S3
     s3_bucket = "mochi-prod-final-trader-ranking"
-    # Prefix base_s3_key with back_test_id if provided
-    base_s3_key = f"{args.back_test_id}/{args.symbol}" if args.back_test_id else args.symbol
+    # No longer using back_test_id as we're summarizing all back_test_ids
+    base_s3_key = args.symbol
 
     print(f"Uploading contents of '{upload_dir}' to s3://{s3_bucket}/{base_s3_key}/...")
 

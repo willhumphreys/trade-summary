@@ -24,15 +24,18 @@ def aggregate_filtered_summary_files(base_output_dir, aggregated_file_path):
                 try:
                     df = pd.read_csv(file_path)
 
-                    # Extract the parameter pattern (scenario) from the directory path
-                    # This assumes the scenario is part of the directory structure like output/btc-1mF/trades/s_.../
-                    # Or adjust regex if scenario is only in the filename itself
-                    param_pattern = re.search(r'(s_[^/]+?)(?=/|$)', root) # Adjusted to look in the root path
-                    if not param_pattern and filename.startswith('s_'): # Fallback: check filename if not in path
-                        param_pattern_in_file = re.match(r'(s_.*?)(?=_filtered_summary.csv)', filename)
-                        scenario = param_pattern_in_file.group(1) if param_pattern_in_file else "unknown_scenario"
-                    elif param_pattern:
-                        scenario = param_pattern.group(1)
+                    # Extract the scenario from the directory path
+                    # The back_test_id will always be in downloaded keys
+                    # The directory structure is: output/symbol/trades/backTestId___scenario_params
+                    parts = root.split(os.path.sep)
+                    if len(parts) >= 4 and 'trades' in parts:
+                        # Find the index of 'trades' in the path
+                        trades_index = parts.index('trades')
+                        # The scenario should be the part after 'trades'
+                        if trades_index + 1 < len(parts):
+                            scenario = parts[trades_index + 1]
+                        else:
+                            scenario = "unknown_scenario"
                     else:
                         scenario = "unknown_scenario"
 
